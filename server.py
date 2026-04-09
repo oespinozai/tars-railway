@@ -75,29 +75,30 @@ def get_piper():
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="TARS", docs_url=None, redoc_url=None)
+from contextlib import asynccontextmanager
 
-@app.on_event("startup")
-async def startup():
-    # Pre-warm models in background so first request isn't slow
+@asynccontextmanager
+async def lifespan(app):
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, get_whisper)
     loop.run_in_executor(None, get_piper)
+    yield
+
+app = FastAPI(title="TARS", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 # ---------------------------------------------------------------------------
 # Auth middleware (optional)
 # ---------------------------------------------------------------------------
+PUBLIC_PATHS = {"/", "/health", "/manifest.json", "/sw.js"}
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if TARS_API_KEY and request.url.path not in ("/", "/static") and not request.url.path.startswith("/static"):
-        token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        if token != TARS_API_KEY:
-            # Allow browser GET requests to frontend without auth
-            if request.method == "GET" and request.url.path in ("/", "/manifest.json", "/sw.js"):
-                pass
-            elif request.method == "GET" and request.url.path.startswith("/static"):
-                pass
-            else:
+    if TARS_API_KEY:
+        path = request.url.path
+        is_public = path in PUBLIC_PATHS or path.startswith("/static")
+        if not is_public:
+            token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            if token != TARS_API_KEY:
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
     return await call_next(request)
 
