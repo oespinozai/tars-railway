@@ -11,8 +11,8 @@ WORKDIR /app
 
 # Install deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir fastapi uvicorn[standard] python-multipart httpx faster-whisper piper-tts && \
+    pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # App code + frontend
 COPY server.py .
