@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="/manifest.json">
+<title>TARS</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --amber: #ffb000;
+    --amber-dim: #7a5300;
+    --amber-glow: rgba(255,176,0,0.15);
+    --bg: #000;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--amber);
+    font-family: 'Courier New', Courier, monospace;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* Vignette */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 99;
+  }
+
+  #app {
+    position: fixed; inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top, 20px) 24px env(safe-area-inset-bottom, 20px);
+  }
+
+  /* Header */
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--amber-dim);
+    flex-shrink: 0;
+  }
+
+  #logo {
+    font-size: 11px;
+    letter-spacing: 6px;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+  }
+
+  #status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--amber-dim);
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  #status-dot.active {
+    background: var(--amber);
+    box-shadow: 0 0 8px var(--amber), 0 0 20px var(--amber-glow);
+  }
+
+  /* Conversation area */
+  #convo {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    scrollbar-width: none;
+  }
+  #convo::-webkit-scrollbar { display: none; }
+
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-label {
+    font-size: 9px;
+    letter-spacing: 4px;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+  }
+
+  .msg-text {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--amber);
+  }
+
+  .msg.user .msg-label { text-align: right; }
+  .msg.user .msg-text  { text-align: right; color: #e8a000; }
+
+  /* Typing cursor */
+  .cursor {
+    display: inline-block;
+    width: 2px; height: 1em;
+    background: var(--amber);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.7s step-end infinite;
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Waveform visualiser */
+  #visualiser-wrap {
+    flex-shrink: 0;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    margin: 8px 0;
+  }
+
+  .bar {
+    width: 3px;
+    border-radius: 2px;
+    background: var(--amber-dim);
+    height: 4px;
+    transition: height 0.05s;
+  }
+
+  /* Mic button */
+  #mic-btn {
+    flex-shrink: 0;
+    align-self: center;
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 2px solid var(--amber-dim);
+    background: transparent;
+    color: var(--amber);
+    font-size: 28px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    margin-bottom: 8px;
+  }
+  #mic-btn:active { transform: scale(0.94); }
+  #mic-btn.recording {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 8px var(--amber-glow), 0 0 24px var(--amber-glow);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 8px var(--amber-glow), 0 0 24px var(--amber-glow); }
+    50%       { box-shadow: 0 0 0 16px rgba(255,176,0,0.05), 0 0 40px var(--amber-glow); }
+  }
+
+  #mic-hint {
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  /* Processing overlay text */
+  #processing {
+    position: fixed;
+    bottom: 120px; left: 0; right: 0;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #processing.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <span id="logo">T · A · R · S</span>
+    <div id="status-dot"></div>
+  </div>
+
+  <div id="convo"></div>
+
+  <div id="visualiser-wrap">
+    <!-- bars injected by JS -->
+  </div>
+
+  <button id="mic-btn" aria-label="Hold to speak">🎙</button>
+  <div id="mic-hint">hold to speak</div>
+</div>
+
+<div id="processing">PROCESSING</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+const API_KEY = ''; // set TARS_API_KEY env var and put it here, or leave blank for no auth
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let audioCtx = null;
+let analyser = null;
+let micStream = null;
+let rafId = null;
+let messages = []; // conversation history
+
+// ---------------------------------------------------------------------------
+// UI refs
+// ---------------------------------------------------------------------------
+const convo       = document.getElementById('convo');
+const micBtn      = document.getElementById('mic-btn');
+const statusDot   = document.getElementById('status-dot');
+const processing  = document.getElementById('processing');
+const visWrap     = document.getElementById('visualiser-wrap');
+
+// Build visualiser bars
+const NUM_BARS = 32;
+const bars = [];
+for (let i = 0; i < NUM_BARS; i++) {
+  const b = document.createElement('div');
+  b.className = 'bar';
+  visWrap.appendChild(b);
+  bars.push(b);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function setStatus(active) {
+  statusDot.classList.toggle('active', active);
+}
+
+function showProcessing(text = 'PROCESSING') {
+  processing.textContent = text;
+  processing.classList.add('show');
+}
+function hideProcessing() {
+  processing.classList.remove('show');
+}
+
+function addMessage(role, text) {
+  const el = document.createElement('div');
+  el.className = `msg ${role}`;
+  el.innerHTML = `
+    <div class="msg-label">${role === 'user' ? 'YOU' : 'TARS'}</div>
+    <div class="msg-text">${escHtml(text)}</div>
+  `;
+  convo.appendChild(el);
+  convo.scrollTop = convo.scrollHeight;
+  return el.querySelector('.msg-text');
+}
+
+function addStreamingMessage() {
+  const el = document.createElement('div');
+  el.className = 'msg assistant';
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = 'TARS';
+  const textEl = document.createElement('div');
+  textEl.className = 'msg-text';
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  textEl.appendChild(cursor);
+  el.appendChild(label);
+  el.appendChild(textEl);
+  convo.appendChild(el);
+  convo.scrollTop = convo.scrollHeight;
+  return { textEl, cursor, el };
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function authHeaders() {
+  return API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {};
+}
+
+// ---------------------------------------------------------------------------
+// Visualiser
+// ---------------------------------------------------------------------------
+function startVisualiser(stream) {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 64;
+  const src = audioCtx.createMediaStreamSource(stream);
+  src.connect(analyser);
+  const data = new Uint8Array(analyser.frequencyBinCount);
+
+  function draw() {
+    analyser.getByteFrequencyData(data);
+    bars.forEach((b, i) => {
+      const v = (data[i] || 0) / 255;
+      const h = Math.max(4, v * 40);
+      b.style.height = h + 'px';
+      b.style.background = v > 0.5 ? 'var(--amber)' : 'var(--amber-dim)';
+    });
+    rafId = requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+function stopVisualiser() {
+  if (rafId) cancelAnimationFrame(rafId);
+  bars.forEach(b => { b.style.height = '4px'; b.style.background = 'var(--amber-dim)'; });
+  if (analyser) analyser.disconnect();
+  if (audioCtx) audioCtx.close();
+  audioCtx = null; analyser = null;
+}
+
+// ---------------------------------------------------------------------------
+// Recording
+// ---------------------------------------------------------------------------
+async function startRecording() {
+  if (isRecording) return;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e) {
+    alert('Microphone access denied.');
+    return;
+  }
+
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(micStream);
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.start();
+  isRecording = true;
+
+  micBtn.classList.add('recording');
+  micBtn.textContent = '⏹';
+  setStatus(true);
+  startVisualiser(micStream);
+}
+
+async function stopRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+
+  micBtn.classList.remove('recording');
+  micBtn.textContent = '🎙';
+  micBtn.disabled = true;
+  stopVisualiser();
+  micStream.getTracks().forEach(t => t.stop());
+
+  await new Promise(res => { mediaRecorder.onstop = res; mediaRecorder.stop(); });
+
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  await processAudio(blob);
+
+  micBtn.disabled = false;
+  setStatus(false);
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline: audio → STT → Gemma 4 → TTS → play
+// ---------------------------------------------------------------------------
+async function processAudio(blob) {
+  // 1. STT
+  showProcessing('TRANSCRIBING');
+  const form = new FormData();
+  form.append('file', blob, 'audio.webm');
+  let userText = '';
+  try {
+    const r = await fetch('/transcribe', { method: 'POST', headers: authHeaders(), body: form });
+    const j = await r.json();
+    userText = (j.text || '').trim();
+  } catch(e) {
+    hideProcessing();
+    addMessage('assistant', 'Transcription failed. Try again.');
+    return;
+  }
+
+  if (!userText) { hideProcessing(); return; }
+  addMessage('user', userText);
+  messages.push({ role: 'user', content: userText });
+
+  // 2. LLM stream
+  showProcessing('THINKING');
+  const { textEl, cursor } = addStreamingMessage();
+  let fullReply = '';
+
+  try {
+    const r = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ messages })
+    });
+
+    hideProcessing();
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') break;
+        try {
+          const chunk = JSON.parse(raw);
+          const delta = chunk.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            fullReply += delta;
+            // Insert text before cursor
+            cursor.parentNode.insertBefore(document.createTextNode(delta), cursor);
+            convo.scrollTop = convo.scrollHeight;
+          }
+        } catch {}
+      }
+    }
+  } catch(e) {
+    hideProcessing();
+    cursor.remove();
+    textEl.textContent = 'Error reaching TARS brain.';
+    return;
+  }
+
+  cursor.remove();
+  messages.push({ role: 'assistant', content: fullReply });
+
+  // 3. TTS
+  if (!fullReply) return;
+  showProcessing('SPEAKING');
+  try {
+    const r = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ text: fullReply })
+    });
+    const wavBlob = await r.blob();
+    const url = URL.createObjectURL(wavBlob);
+    const audio = new Audio(url);
+    setStatus(true);
+    audio.onended = () => { setStatus(false); URL.revokeObjectURL(url); };
+    await audio.play();
+  } catch(e) {
+    console.warn('TTS failed', e);
+  }
+  hideProcessing();
+}
+
+// ---------------------------------------------------------------------------
+// Mic button — tap to start, tap again to stop
+// ---------------------------------------------------------------------------
+micBtn.addEventListener('click', async () => {
+  if (isRecording) {
+    await stopRecording();
+  } else {
+    await startRecording();
+  }
+});
+
+// Also support hold-to-talk on desktop
+micBtn.addEventListener('mousedown', async (e) => {
+  if (e.pointerType === 'mouse') await startRecording();
+});
+micBtn.addEventListener('mouseup', async (e) => {
+  if (e.pointerType === 'mouse' && isRecording) await stopRecording();
+});
+
+// ---------------------------------------------------------------------------
+// Boot message
+// ---------------------------------------------------------------------------
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const { textEl, cursor } = addStreamingMessage();
+    const intro = "TARS online. Interstellar AI module active. Humor setting: 75%. How can I assist?";
+    let i = 0;
+    const t = setInterval(() => {
+      if (i >= intro.length) { clearInterval(t); cursor.remove(); return; }
+      cursor.parentNode.insertBefore(document.createTextNode(intro[i++]), cursor);
+      convo.scrollTop = convo.scrollHeight;
+    }, 28);
+  }, 400);
+});
+</script>
+</body>
+</html>
