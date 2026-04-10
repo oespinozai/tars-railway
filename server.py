@@ -80,8 +80,11 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app):
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, get_whisper)
-    loop.run_in_executor(None, get_piper)
+    for fn in (get_whisper, get_piper):
+        fut = loop.run_in_executor(None, fn)
+        fut.add_done_callback(
+            lambda f: f.exception() and print(f"[TARS] Startup error: {f.exception()}")
+        )
     yield
 
 app = FastAPI(title="TARS", docs_url=None, redoc_url=None, lifespan=lifespan)
@@ -97,8 +100,9 @@ async def auth_middleware(request: Request, call_next):
         path = request.url.path
         is_public = path in PUBLIC_PATHS or path.startswith("/static")
         if not is_public:
-            token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-            if token != TARS_API_KEY:
+            bearer = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            cookie = request.cookies.get("tars_session", "")
+            if bearer != TARS_API_KEY and cookie != TARS_API_KEY:
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
     return await call_next(request)
 
@@ -206,7 +210,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def frontend():
-    return FileResponse("static/index.html")
+    response = FileResponse("static/index.html")
+    if TARS_API_KEY:
+        response.set_cookie("tars_session", TARS_API_KEY, httponly=True, samesite="strict")
+    return response
 
 @app.get("/manifest.json")
 async def manifest():

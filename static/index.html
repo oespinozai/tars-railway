@@ -314,11 +314,6 @@
 
 <script>
 // ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-const API_KEY = 'tK-7he97gEh7gxs9-WPnyLIuCyinw0rkNfsmm4NAwOY';
-
-// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 let mediaRecorder = null;
@@ -397,10 +392,6 @@ function addStreamingMessage() {
 
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function authHeaders() {
-  return API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {};
 }
 
 // ---------------------------------------------------------------------------
@@ -488,7 +479,7 @@ async function processAudio(blob) {
   form.append('file', blob, 'audio.webm');
   let userText = '';
   try {
-    const r = await fetch('/transcribe', { method: 'POST', headers: authHeaders(), body: form });
+    const r = await fetch('/transcribe', { method: 'POST', body: form });
     const j = await r.json();
     userText = (j.text || '').trim();
   } catch(e) {
@@ -509,8 +500,8 @@ async function processAudio(blob) {
   try {
     const r = await fetch('/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ messages })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, context: contextText })
     });
 
     hideProcessing();
@@ -556,7 +547,7 @@ async function processAudio(blob) {
   try {
     const r = await fetch('/tts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: fullReply })
     });
     const wavBlob = await r.blob();
@@ -572,22 +563,31 @@ async function processAudio(blob) {
 }
 
 // ---------------------------------------------------------------------------
-// Mic button — tap to start, tap again to stop
+// Mic button — tap to toggle on touch; hold-to-talk on mouse
 // ---------------------------------------------------------------------------
-micBtn.addEventListener('click', async () => {
+let holdMode = false;
+
+micBtn.addEventListener('pointerdown', async (e) => {
+  if (e.pointerType === 'mouse') {
+    holdMode = true;
+    await startRecording();
+  }
+});
+
+micBtn.addEventListener('pointerup', async (e) => {
+  if (e.pointerType === 'mouse' && holdMode) {
+    holdMode = false;
+    await stopRecording();
+  }
+});
+
+micBtn.addEventListener('click', async (e) => {
+  if (holdMode) return; // already handled by pointerdown/up
   if (isRecording) {
     await stopRecording();
   } else {
     await startRecording();
   }
-});
-
-// Also support hold-to-talk on desktop
-micBtn.addEventListener('mousedown', async (e) => {
-  if (e.pointerType === 'mouse') await startRecording();
-});
-micBtn.addEventListener('mouseup', async (e) => {
-  if (e.pointerType === 'mouse' && isRecording) await stopRecording();
 });
 
 // ---------------------------------------------------------------------------
