@@ -130,9 +130,18 @@ async def transcribe(file: UploadFile = File(...)):
 async def chat(request: Request):
     body = await request.json()
     messages = body.get("messages", [])
+    context = body.get("context", "").strip()
+
+    system_content = SYSTEM_PROMPT
+    if context:
+        system_content += (
+            "\n\nThe user has provided the following document or text for reference. "
+            "Use it to answer their questions. When speaking, be concise — you are talking aloud.\n\n"
+            f"--- DOCUMENT START ---\n{context}\n--- DOCUMENT END ---"
+        )
 
     # Prepend system prompt
-    full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    full_messages = [{"role": "system", "content": system_content}] + messages
 
     async def stream_gemma() -> AsyncGenerator[bytes, None]:
         async with httpx.AsyncClient(timeout=60) as client:

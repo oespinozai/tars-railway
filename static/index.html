@@ -197,6 +197,75 @@
     margin-bottom: 4px;
   }
 
+  /* Context panel */
+  #ctx-btn {
+    background: transparent;
+    border: 1px solid var(--amber-dim);
+    color: var(--amber-dim);
+    font-family: inherit;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: color 0.2s, border-color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #ctx-btn.has-context {
+    color: var(--amber);
+    border-color: var(--amber);
+  }
+
+  #ctx-panel {
+    flex-shrink: 0;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  #ctx-panel.open { display: flex; }
+
+  #ctx-area {
+    background: transparent;
+    border: 1px solid var(--amber-dim);
+    color: var(--amber);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 8px;
+    resize: vertical;
+    min-height: 90px;
+    max-height: 200px;
+    outline: none;
+    border-radius: 2px;
+  }
+  #ctx-area::placeholder { color: var(--amber-dim); }
+  #ctx-area:focus { border-color: var(--amber); }
+
+  #ctx-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .ctx-action-btn {
+    background: transparent;
+    border: 1px solid var(--amber-dim);
+    color: var(--amber-dim);
+    font-family: inherit;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    cursor: pointer;
+    border-radius: 2px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ctx-action-btn.primary {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
   /* Processing overlay text */
   #processing {
     position: fixed;
@@ -222,12 +291,23 @@
 
   <div id="convo"></div>
 
+  <div id="ctx-panel">
+    <textarea id="ctx-area" placeholder="Paste text here — TARS will read it and answer your questions about it…"></textarea>
+    <div id="ctx-actions">
+      <button class="ctx-action-btn" id="ctx-clear-btn">Clear</button>
+      <button class="ctx-action-btn primary" id="ctx-set-btn">Load document</button>
+    </div>
+  </div>
+
   <div id="visualiser-wrap">
     <!-- bars injected by JS -->
   </div>
 
   <button id="mic-btn" aria-label="Hold to speak">🎙</button>
   <div id="mic-hint">hold to speak</div>
+  <div style="text-align:center;margin-top:6px;">
+    <button id="ctx-btn">📄 load text</button>
+  </div>
 </div>
 
 <div id="processing">PROCESSING</div>
@@ -249,6 +329,7 @@ let analyser = null;
 let micStream = null;
 let rafId = null;
 let messages = []; // conversation history
+let contextText = ''; // loaded document
 
 // ---------------------------------------------------------------------------
 // UI refs
